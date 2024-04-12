@@ -13,6 +13,12 @@ public enum WeaponType
 	Unknown
 }
 
+public enum WeaponPreferencesMenu
+{
+	Rifle = 0,
+	Pistol = 5,
+}
+
 public struct WeaponModel
 {
 	public static List<CsItem> rifleItems = new List<CsItem>()

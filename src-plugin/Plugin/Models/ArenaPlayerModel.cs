@@ -160,7 +160,7 @@ public class ArenaPlayer
 	{
 		ChatMenu weaponPreferenceMenu = new ChatMenu(Localizer["k4.menu.weaponpref.title"]);
 
-		foreach (WeaponType weaponType in Enum.GetValues(typeof(WeaponType)))
+		foreach (WeaponType weaponType in Enum.GetValues(typeof(WeaponPreferencesMenu)))
 		{
 			weaponPreferenceMenu.AddMenuOption(Localizer[$"k4.rounds.{weaponType.ToString().ToLower()}"],
 				(player, option) =>
