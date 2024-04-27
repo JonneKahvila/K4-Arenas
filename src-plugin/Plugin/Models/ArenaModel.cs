@@ -90,7 +90,7 @@ public class Arena
 			return;
 
 		ArenaID = -1;
-		RoundType = new RoundType("none", 1, null, null, true, WeaponType.Unknown, true);
+		RoundType = new RoundType("none", 1, null, null, false, WeaponType.Unknown, false);
 		ArenaScore = 0;
 
 		var (t1Spawns, t2Spawns) = Plugin.rng.Next(0, 2) == 1 ? (Spawns.Item1, Spawns.Item2) : (Spawns.Item2, Spawns.Item1);
@@ -156,31 +156,17 @@ public class Arena
 
 				player.Controller.Score = ArenaScore;
 
-				switch (ArenaID)
-				{
-					case -2:
-						player.Controller.Clan = $"{Localizer["k4.general.challenge"]} |";
-						break;
-					case -1:
-						player.Controller.Clan = $"{Localizer["k4.general.warmup"]} |";
-						break;
-					default:
-						player.Controller.Clan = $"{Localizer["k4.general.arena"]} {ArenaID} |";
-						break;
-
-				}
-
+				player.Controller.Clan = Plugin.GetRequiredTag(ArenaID);
 				Utilities.SetStateChanged(player.Controller, "CCSPlayerController", "m_szClan");
+
+				string arenaName = ArenaID == -1 ? Localizer["k4.general.warmup"] : Localizer["k4.general.arena", ArenaID];
 
 				player.Controller.SwitchTeam(switchTo);
 
 				if (ArenaID != -1)
 				{
-					player.Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.arena_roundstart", ArenaID, Plugin.GetOpponentNames(opponents) ?? "Unknown", Localizer[RoundType.Name ?? "Missing"]]}");
-					player.Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.arena_commands", Plugin.Config.CommandSettings.GunsCommands.FirstOrDefault("Missing"), Plugin.Config.CommandSettings.RoundsCommands.FirstOrDefault("Missing")]}");
+					player.Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.arena_roundstart", Plugin.GetRequiredArenaName(ArenaID), Plugin.GetOpponentNames(opponents) ?? "Unknown", Localizer[RoundType.Name ?? "Missing"]]}");
 				}
-
-				player.Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.arena_afk", Plugin.Config.CommandSettings.AFKCommands.FirstOrDefault("Missing")]}");
 
 				if (Plugin.gameRules?.WarmupPeriod == true)
 				{
@@ -263,6 +249,11 @@ public class Arena
 					{
 						Server.PrintToChatAll($"{Localizer["k4.general.prefix"]} {Localizer["k4.general.challenge.tie", Team1.First().Controller.PlayerName, Team2.First().Controller.PlayerName]}");
 						Result = new ArenaResult(ArenaResultType.Tie, null, null);
+
+						Team1.Concat(Team2)
+							.Where(p => p.Challenge is not null)
+							.ToList()
+							.ForEach(p => p.Challenge!.IsEnded = true);
 					}
 					else
 						Result = new ArenaResult(ArenaResultType.Tie, Team1, Team2);
@@ -276,6 +267,11 @@ public class Arena
 
 						Server.PrintToChatAll($"{Localizer["k4.general.prefix"]} {Localizer["k4.general.challenge.winner", winner.Controller.PlayerName, loser.Controller.PlayerName]}");
 						Result = new ArenaResult(ArenaResultType.Win, null, null);
+
+						Team1.Concat(Team2)
+							.Where(p => p.Challenge is not null)
+							.ToList()
+							.ForEach(p => p.Challenge!.IsEnded = true);
 					}
 					else
 					{

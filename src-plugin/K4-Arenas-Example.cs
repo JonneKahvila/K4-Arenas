@@ -16,14 +16,15 @@ public class PluginK4ArenaRoundExample : BasePlugin
 	public override string ModuleVersion => "1.0.0";
 
 	public static PluginCapability<IK4ArenaSharedApi> Capability_SharedAPI { get; } = new("k4-arenas:sharedapi");
-	public override void Load(bool hotReload)
+	public override void OnAllPluginsLoaded(bool hotReload)
 	{
 		IK4ArenaSharedApi? checkAPI = Capability_SharedAPI.Get();
 
 		if (checkAPI != null)
 		{
 			// This registers the name, team size, start function, and end function for the special round.
-			RoundTypeID = checkAPI.AddSpecialRound("NameOfRound", 1, RoundStart, RoundEnd);
+			// False is the state of being enabled in the player's round preferences by default
+			RoundTypeID = checkAPI.AddSpecialRound("NameOfRound", 1, false, RoundStart, RoundEnd);
 		}
 		else
 			Logger.LogError("Failed to get shared API capability for K4-Arenas.");

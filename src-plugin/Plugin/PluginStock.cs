@@ -4,20 +4,21 @@ namespace K4Arenas
 	using CounterStrikeSharp.API;
 	using CounterStrikeSharp.API.Core;
 	using CounterStrikeSharp.API.Modules.Utils;
-
 	using CounterStrikeSharp.API.Modules.Commands;
-
 	using K4Arenas.Models;
 	using CounterStrikeSharp.API.Modules.Admin;
-	using CounterStrikeSharp.API.Modules.Cvars;
 	using System.Data;
 	using CounterStrikeSharp.API.Modules.Entities.Constants;
-	using System.Runtime.InteropServices;
+	using System.Runtime.Serialization;
+	using CounterStrikeSharp.API.Modules.Cvars;
 
 	public sealed partial class Plugin : BasePlugin
 	{
 		public void TerminateRoundIfPossible(CsTeam? team = null)
 		{
+			if (IsBetweenRounds)
+				return;
+
 			if (gameRules is null || gameRules.WarmupPeriod == true)
 				return;
 
@@ -29,7 +30,7 @@ namespace K4Arenas
 			if (players.Count(p => !p.IsBot) == 0)
 				return;
 
-			List<CCSPlayerController> alivePlayers = players.Where(x => x?.IsValid == true && x.PlayerPawn?.IsValid == true && x.PlayerPawn.Value?.Health > 0).ToList();
+			List<CCSPlayerController> alivePlayers = players.Where(x => x.PlayerPawn.Value?.Health > 0).ToList();
 
 			if (alivePlayers.Count == 0 || (team != null && alivePlayers.Count(x => x.Team == team) == 0))
 				return;
@@ -53,7 +54,7 @@ namespace K4Arenas
 
 				Server.NextFrame(() =>
 				{
-					gameRules.TerminateRound(3, tCount > ctCount ? RoundEndReason.TerroristsWin : ctCount > tCount ? RoundEndReason.CTsWin : RoundEndReason.RoundDraw);
+					gameRules.TerminateRound(ConVar.Find("mp_round_restart_delay")?.GetPrimitiveValue<float>() ?? 3f, tCount > ctCount ? RoundEndReason.TerroristsWin : ctCount > tCount ? RoundEndReason.CTsWin : RoundEndReason.RoundDraw);
 				});
 			}
 		}
@@ -69,7 +70,12 @@ namespace K4Arenas
 			ArenaPlayer arenaPlayer = new ArenaPlayer(this, playerController);
 			WaitingArenaPlayers.Enqueue(arenaPlayer);
 
+			if (arenaPlayer.Controller.IsBot)
+				return arenaPlayer;
+
 			arenaPlayer.Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.queue_added", WaitingArenaPlayers.Count]}");
+			arenaPlayer.Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.arena_commands", Config.CommandSettings.GunsCommands.FirstOrDefault("Missing"), Config.CommandSettings.RoundsCommands.FirstOrDefault("Missing")]}");
+			arenaPlayer.Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.arena_afk", Config.CommandSettings.AFKCommands.FirstOrDefault("Missing")]}");
 
 			ulong steamID = playerController.SteamID;
 			Task.Run(async () =>
@@ -129,24 +135,20 @@ namespace K4Arenas
 		public void CheckCommonProblems()
 		{
 			// Common things that fuck up the gameplay
-			Server.ExecuteCommand("mp_halftime 0");
 			Server.ExecuteCommand("mp_join_grace_time 0");
 
-
-			// We handle weapons dont worry
+			// This could cause problems with the items
 			Server.ExecuteCommand("mp_t_default_secondary \"\"");
 			Server.ExecuteCommand("mp_ct_default_secondary \"\"");
 			Server.ExecuteCommand("mp_t_default_primary \"\"");
 			Server.ExecuteCommand("mp_ct_default_primary \"\"");
-
-			// This could cause problems with the items
 			Server.ExecuteCommand("mp_equipment_reset_rounds 0");
 			Server.ExecuteCommand("mp_free_armor 0");
 		}
 
 		public RoundType GetCommonRoundType(List<RoundType>? roundPreferences1, List<RoundType>? roundPreferences2, bool multi)
 		{
-			List<RoundType> commonRounds = roundPreferences1?.Intersect(roundPreferences2 ?? Enumerable.Empty<RoundType>())?.ToList() ?? new List<RoundType>();
+			List<RoundType> commonRounds = roundPreferences1?.Intersect(roundPreferences2 ?? roundPreferences1)?.ToList() ?? new List<RoundType>();
 			List<RoundType> commonUsableRounds = multi ? commonRounds : commonRounds.Where(rt => rt.TeamSize < 2).ToList();
 
 			if (commonUsableRounds.Any())
@@ -228,5 +230,53 @@ namespace K4Arenas
 
 			return string.Join(", ", opponents.Where(p => p.IsValid).Select(p => p.Controller.PlayerName));
 		}
+
+		public static CsItem? FindEnumValueByEnumMemberValue(string? search)
+		{
+			if (search is null)
+				return null;
+
+			var type = typeof(CsItem);
+			foreach (var field in type.GetFields())
+			{
+				var attribute = field.GetCustomAttributes(typeof(EnumMemberAttribute), false).Cast<EnumMemberAttribute>().FirstOrDefault();
+				if (attribute?.Value == search)
+				{
+					return (CsItem?)field.GetValue(null);
+				}
+			}
+			return null;
+		}
+
+		public string? GetRequiredTag(CCSPlayerController player)
+		{
+			var arena = Arenas?.ArenaList.FirstOrDefault(a =>
+				(a.Team1?.Any(p => p.Controller == player) ?? false) ||
+				(a.Team2?.Any(p => p.Controller == player) ?? false));
+
+			if (arena != null)
+				return GetRequiredTag(arena.ArenaID);
+
+			if (WaitingArenaPlayers.Any(p => p.Controller == player))
+				return Localizer["k4.general.waiting"];
+
+			return null;
+		}
+
+		public string GetRequiredTag(int arenaID) =>
+			arenaID switch
+			{
+				-2 => $"{Localizer["k4.general.challenge"]} |",
+				-1 => $"{Localizer["k4.general.warmup"]} |",
+				_ => $"{Localizer["k4.general.arena"]} {arenaID} |",
+			};
+
+		public string GetRequiredArenaName(int arenaID) =>
+		arenaID switch
+		{
+			-2 => Localizer["k4.general.challenge"],
+			-1 => Localizer["k4.general.warmup"],
+			_ => $"{arenaID}"
+		};
 	}
 }

@@ -13,12 +13,16 @@ namespace K4Arenas
 		{
 			RegisterListener<Listeners.OnMapStart>((mapName) =>
 			{
-				CheckCommonProblems();
 				Task.Run(PurgeDatabaseAsync);
 
 				AddTimer(0.1f, () =>
 				{
-					Arenas = new Arenas(this);
+					GameConfig?.Apply();
+					CheckCommonProblems();
+
+					if (Arenas is null)
+						Arenas = new Arenas(this);
+
 					gameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
 
 					if (gameRules?.WarmupPeriod == true)
@@ -32,6 +36,7 @@ namespace K4Arenas
 							}
 							else
 							{
+								GameConfig?.Apply();
 								WarmupTimer?.Kill();
 							}
 						}, TimerFlags.REPEAT | TimerFlags.STOP_ON_MAPCHANGE);
@@ -57,6 +62,9 @@ namespace K4Arenas
 				if (playerController.IsHLTV)
 					return HookResult.Continue;
 
+				if (Arenas?.FindPlayer(playerController) != null)
+					return HookResult.Continue;
+
 				SetupPlayer(playerController);
 
 				if (gameRules?.WarmupPeriod == false)
@@ -77,9 +85,18 @@ namespace K4Arenas
 				if (!playerController.IsValid)
 					return HookResult.Continue;
 
+				if (!playerController.IsBot && !playerController.IsHLTV)
+				{
+					ArenaPlayer? arenaPlayer = Arenas?.FindPlayer(playerController);
+
+					if (arenaPlayer is null)
+						return HookResult.Continue;
+
+					Task.Run(() => SavePlayerPreferencesAsync(new List<ArenaPlayer> { arenaPlayer }));
+				}
+
 				WaitingArenaPlayers = new Queue<ArenaPlayer>(WaitingArenaPlayers.Where(p => p.Controller != playerController));
 				Arenas?.ArenaList.ForEach(arena => arena.RemovePlayer(playerController));
-
 				return HookResult.Continue;
 			});
 
@@ -91,6 +108,7 @@ namespace K4Arenas
 				if (Arenas is null)
 					Arenas = new Arenas(this);
 
+				GameConfig?.Apply();
 				CheckCommonProblems();
 
 				Utilities.GetPlayers()
@@ -180,10 +198,7 @@ namespace K4Arenas
 				{
 					if (player.AFK)
 					{
-						for (int i = 0; i < 3; i++)
-						{
-							player.Controller.PrintToChat($"{Localizer["k4.general.prefix"]} {Localizer["k4.chat.afk_reminder", Config.CommandSettings.AFKCommands.FirstOrDefault("Missing")]}");
-						}
+						player.Controller.PrintToChat($"{Localizer["k4.general.prefix"]} {Localizer["k4.chat.afk_reminder", Config.CommandSettings.AFKCommands.FirstOrDefault("Missing")]}");
 
 						player.Controller.Clan = $"{Localizer["k4.general.afk"]} |";
 						Utilities.SetStateChanged(player.Controller, "CCSPlayerController", "m_szClan");
@@ -221,6 +236,8 @@ namespace K4Arenas
 
 						if (team1.Count(p => p.IsValid) == 0 || team2.Count(p => p.IsValid) == 0)
 							continue;
+
+						notAFKrankedPlayers = new Queue<ArenaPlayer>(notAFKrankedPlayers.Except(team1.Concat(team2)));
 
 						Arenas.ArenaList[arenaID].AddChallengePlayers(team1, team2);
 						continue;
@@ -264,8 +281,16 @@ namespace K4Arenas
 				return HookResult.Continue;
 			});
 
+			RegisterEventHandler((EventRoundStart @event, GameEventInfo info) =>
+			{
+				IsBetweenRounds = false;
+				return HookResult.Continue;
+			});
+
 			RegisterEventHandler((EventRoundEnd @event, GameEventInfo info) =>
 			{
+				IsBetweenRounds = true;
+
 				if (Arenas is null)
 					return HookResult.Continue;
 

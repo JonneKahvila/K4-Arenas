@@ -1,3 +1,4 @@
+using System.Runtime.Serialization;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
 using K4Arenas.Models;
@@ -18,10 +19,11 @@ namespace K4Arenas.Models
 		public readonly bool Armor;
 		public readonly bool Helmet;
 		public readonly int TeamSize;
+		public readonly bool EnabledByDefault;
 		public readonly Action<List<CCSPlayerController>?, List<CCSPlayerController>?>? StartFunction;
 		public readonly Action<List<CCSPlayerController>?, List<CCSPlayerController>?>? EndFunction;
 
-		public RoundType(string name, int teamSize, CsItem? primary, CsItem? secondary, bool usePreferredPrimary = false, WeaponType? primaryPreference = null, bool usePreferredSecondary = false, bool armor = true, bool helmet = true, Action<List<CCSPlayerController>?, List<CCSPlayerController>?>? startFunction = null, Action<List<CCSPlayerController>?, List<CCSPlayerController>?>? endFunction = null)
+		public RoundType(string name, int teamSize, CsItem? primary, CsItem? secondary, bool usePreferredPrimary = false, WeaponType? primaryPreference = null, bool usePreferredSecondary = false, bool armor = true, bool helmet = true, bool enabledByDefaultAction = true, Action<List<CCSPlayerController>?, List<CCSPlayerController>?>? startFunction = null, Action<List<CCSPlayerController>?, List<CCSPlayerController>?>? endFunction = null)
 		{
 			ID = nextID++;
 			Name = name;
@@ -35,6 +37,7 @@ namespace K4Arenas.Models
 			PrimaryPreference = primaryPreference;
 			StartFunction = startFunction;
 			EndFunction = endFunction;
+			EnabledByDefault = enabledByDefaultAction;
 		}
 
 		public static readonly RoundType Rifle = new RoundType("k4.rounds.rifle", 1, null, null, true, WeaponType.Rifle, true);
@@ -54,12 +57,15 @@ namespace K4Arenas.Models
 
 		public static void AddRoundType(RoundTypeReader roundType)
 		{
-			RoundTypes.Add(new RoundType(roundType.TranslationName, roundType.TeamSize, roundType.PrimaryWeapon, roundType.SecondaryWeapon, roundType.UsePreferredPrimary, roundType.PrimaryPreference, roundType.UsePreferredSecondary, roundType.Armor, roundType.Helmet));
+			CsItem? PrimaryPreference = FindEnumValueByEnumMemberValue(roundType.PrimaryWeapon);
+			CsItem? SecondaryPreference = FindEnumValueByEnumMemberValue(roundType.SecondaryWeapon);
+
+			RoundTypes.Add(new RoundType(roundType.TranslationName, roundType.TeamSize, PrimaryPreference, SecondaryPreference, roundType.UsePreferredPrimary, roundType.PrimaryPreference, roundType.UsePreferredSecondary, roundType.Armor, roundType.Helmet, roundType.EnabledByDefault));
 		}
 
-		public static int AddSpecialRoundType(string name, int teamSize, Action<List<CCSPlayerController>?, List<CCSPlayerController>?> startFunction, Action<List<CCSPlayerController>?, List<CCSPlayerController>?> endFunction)
+		public static int AddSpecialRoundType(string name, int teamSize, bool enabledByDefault, Action<List<CCSPlayerController>?, List<CCSPlayerController>?> startFunction, Action<List<CCSPlayerController>?, List<CCSPlayerController>?> endFunction)
 		{
-			RoundType specialRound = new RoundType(name, teamSize, null, null, false, null, false, false, false, startFunction, endFunction);
+			RoundType specialRound = new RoundType(name, teamSize, null, null, false, null, false, false, false, enabledByDefault, startFunction, endFunction);
 			RoundTypes.Add(specialRound);
 			return specialRound.ID;
 		}
@@ -94,6 +100,23 @@ namespace K4Arenas.Models
 				ThreeVSThree
 			});
 		}
+
+		public static CsItem? FindEnumValueByEnumMemberValue(string? search)
+		{
+			if (search is null)
+				return null;
+
+			var type = typeof(CsItem);
+			foreach (var field in type.GetFields())
+			{
+				var attribute = field.GetCustomAttributes(typeof(EnumMemberAttribute), false).Cast<EnumMemberAttribute>().FirstOrDefault();
+				if (attribute?.Value == search)
+				{
+					return (CsItem?)field.GetValue(null);
+				}
+			}
+			return null;
+		}
 	}
 }
 
@@ -101,11 +124,12 @@ public class RoundTypeReader
 {
 	public required string TranslationName { get; set; }
 	public int TeamSize { get; set; } = 1;
-	public CsItem? PrimaryWeapon { get; set; } = null;
-	public CsItem? SecondaryWeapon { get; set; } = null;
+	public string? PrimaryWeapon { get; set; } = null;
+	public string? SecondaryWeapon { get; set; } = null;
 	public bool UsePreferredPrimary { get; set; } = false;
-	public WeaponType? PrimaryPreference { get; set; } = WeaponType.Unknown;
+	public WeaponType? PrimaryPreference { get; set; } = null;
 	public bool UsePreferredSecondary { get; set; } = false;
 	public bool Armor { get; set; } = true;
 	public bool Helmet { get; set; } = true;
+	public bool EnabledByDefault { get; set; } = true;
 }

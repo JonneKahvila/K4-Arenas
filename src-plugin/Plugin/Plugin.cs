@@ -8,13 +8,19 @@
     using K4Arenas.Models;
     using CounterStrikeSharp.API;
     using CounterStrikeSharp.API.Modules.Timers;
+    using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
+    using System.Runtime.InteropServices;
 
     [MinimumApiVersion(200)]
     public sealed partial class Plugin : BasePlugin, IPluginConfig<PluginConfig>
     {
         //** ? PLUGIN GLOBALS */
         public required PluginConfig Config { get; set; } = new PluginConfig();
-        public static readonly Random rng = new Random();
+        public GameConfig? GameConfig { get; set; }
+        public static readonly Random rng = new();
+        public static MemoryFunctionVoid<IntPtr, string, IntPtr, IntPtr, IntPtr, IntPtr, IntPtr, IntPtr>? GiveNamedItem2;
+
+        public bool IsBetweenRounds = false;
 
         public void OnConfigParsed(PluginConfig config)
         {
@@ -24,6 +30,14 @@
             {
                 base.Logger.LogWarning("Configuration version mismatch (Expected: {0} | Current: {1})", this.Config.Version, config.Version);
             }
+
+            //** ? Signature Check */
+
+            GiveNamedItem2 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ? new(@"\x55\x48\x89\xE5\x41\x57\x41\x56\x41\x55\x41\x54\x53\x48\x83\xEC\x18\x48\x89\x7D\xC8\x48\x85\xF6\x74")
+                : RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? new(@"\x48\x83\xEC\x38\x48\xC7\x44\x24\x28\x00\x00\x00\x00\x45\x33\xC9\x45\x33\xC0\xC6\x44\x24\x20\x00\xE8\x2A\x2A\x2A\x2A\x48\x85")
+                    : null;
 
             //** ? Load Round Types */
 
@@ -46,9 +60,16 @@
 
         public CCSGameRules? gameRules = null;
         public Timer? WarmupTimer { get; set; } = null;
+        public Timer? ForceClanTimer { get; set; } = null;
 
         public override void Load(bool hotReload)
         {
+            if (Config.UsePredefinedConfig)
+            {
+                GameConfig = new GameConfig(this);
+                GameConfig?.Apply();
+            }
+
             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(ModulePath);
 
             if (!IsDatabaseConfigDefault(Config))
@@ -74,6 +95,9 @@
 
             if (hotReload)
             {
+                if (Arenas is null)
+                    Arenas = new Arenas(this);
+
                 gameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First().GameRules;
 
                 Utilities.GetPlayers()
@@ -86,6 +110,40 @@
 
                 Server.ExecuteCommand("mp_restartgame 1");
             }
+
+            //** ? Force Clantags */
+
+            if (Config.CompatibilitySettings.ForceArenaClantags)
+            {
+                ForceClanTimer = AddTimer(1, () =>
+                {
+                    if (Arenas is null) return;
+
+                    var validPlayers = Utilities.GetPlayers()
+                        .Where(p => p?.IsValid == true && p.PlayerPawn?.IsValid == true && !p.IsBot && !p.IsHLTV && p.Connected == PlayerConnectedState.PlayerConnected);
+
+                    foreach (CCSPlayerController player in validPlayers)
+                    {
+                        string? requiredTag = GetRequiredTag(player);
+                        if (requiredTag != null && player.Clan != requiredTag)
+                        {
+                            player.Clan = requiredTag;
+                            Utilities.SetStateChanged(player, "CCSPlayerController", "m_szClan");
+                        }
+                    }
+                }, TimerFlags.REPEAT);
+            }
+        }
+
+        public override void Unload(bool hotReload)
+        {
+            List<ArenaPlayer> players = Utilities.GetPlayers()
+                 .Where(p => p.IsValid && p.PlayerPawn?.IsValid == true && !p.IsBot && !p.IsHLTV && p.Connected == PlayerConnectedState.PlayerConnected)
+                 .Select(p => Arenas?.FindPlayer(p)!)
+                 .Where(p => p != null)
+                 .ToList();
+
+            Task.Run(() => SavePlayerPreferencesAsync(players));
         }
     }
 }

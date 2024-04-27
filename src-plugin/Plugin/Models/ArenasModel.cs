@@ -26,7 +26,7 @@ public class Arenas
 			ArenaList.Add(arena);
 		}
 
-		Plugin.Logger.LogInformation("Succesfully setup {0} arenas!", ArenaList.Count);
+		Plugin.Logger.LogInformation("Successfully setup {0} arenas!", ArenaList.Count);
 	}
 
 	public int Count

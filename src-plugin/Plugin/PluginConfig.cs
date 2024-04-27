@@ -1,12 +1,14 @@
 namespace K4Arenas
 {
 	using CounterStrikeSharp.API.Core;
-	using CounterStrikeSharp.API.Modules.Entities.Constants;
 	using K4Arenas.Models;
 	using System.Text.Json.Serialization;
 
 	public sealed class PluginConfig : BasePluginConfig
 	{
+		[JsonPropertyName("use-predefined-config")]
+		public bool UsePredefinedConfig { get; set; } = true;
+
 		[JsonPropertyName("database-settings")]
 		public DatabaseSettings DatabaseSettings { get; set; } = new DatabaseSettings();
 
@@ -16,8 +18,7 @@ namespace K4Arenas
 		[JsonPropertyName("round-settings")]
 		public List<RoundTypeReader> RoundSettings { get; set; } = new List<RoundTypeReader>
 		{
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.rifle",
 				TeamSize = 1,
 				UsePreferredPrimary = true,
@@ -26,8 +27,7 @@ namespace K4Arenas
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.sniper",
 				TeamSize = 1,
 				UsePreferredPrimary = true,
@@ -36,8 +36,7 @@ namespace K4Arenas
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.shotgun",
 				TeamSize = 1,
 				UsePreferredPrimary = true,
@@ -46,42 +45,37 @@ namespace K4Arenas
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.pistol",
 				TeamSize = 1,
 				UsePreferredSecondary = true,
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.scout",
 				TeamSize = 1,
-				PrimaryWeapon = CsItem.Scout,
+				PrimaryWeapon = "weapon_ssg08",
 				UsePreferredSecondary = true,
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.awp",
 				TeamSize = 1,
-				PrimaryWeapon = CsItem.AWP,
+				PrimaryWeapon = "weapon_awp",
 				UsePreferredSecondary = true,
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.deagle",
 				TeamSize = 1,
-				SecondaryWeapon = CsItem.Deagle,
+				SecondaryWeapon = "weapon_deagle",
 				Armor = false,
 				Helmet = false
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.smg",
 				TeamSize = 1,
 				UsePreferredPrimary = true,
@@ -90,8 +84,7 @@ namespace K4Arenas
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.lmg",
 				TeamSize = 1,
 				UsePreferredPrimary = true,
@@ -100,28 +93,27 @@ namespace K4Arenas
 				Armor = true,
 				Helmet = true
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.2vs2",
 				TeamSize = 2,
 				UsePreferredPrimary = true,
 				UsePreferredSecondary = true,
 				PrimaryPreference = WeaponType.Unknown,
 				Armor = true,
-				Helmet = true
+				Helmet = true,
+				EnabledByDefault = false
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.3vs3",
 				TeamSize = 3,
 				UsePreferredPrimary = true,
 				UsePreferredSecondary = true,
 				PrimaryPreference = WeaponType.Unknown,
 				Armor = true,
-				Helmet = true
+				Helmet = true,
+				EnabledByDefault = false
 			},
-			new RoundTypeReader
-			{
+			new() {
 				TranslationName = "k4.rounds.knife",
 				TeamSize = 1,
 				Armor = false,
@@ -132,6 +124,9 @@ namespace K4Arenas
 		[JsonPropertyName("compatibility-settings")]
 		public CompatibilitySettings CompatibilitySettings { get; set; } = new CompatibilitySettings();
 
+		[JsonPropertyName("default-weapon-settings")]
+		public DefaultWeaponSettings DefaultWeaponSettings { get; set; } = new DefaultWeaponSettings();
+
 		[JsonPropertyName("ConfigVersion")]
 		public override int Version { get; set; } = 1;
 	}
@@ -141,8 +136,8 @@ namespace K4Arenas
 		[JsonPropertyName("metamod-skinchanger-compatibility")]
 		public bool MetamodSkinchanger { get; set; } = false;
 
-		[JsonPropertyName("css-skinchanger-knife-compatibility")]
-		public bool CSSSkinchangerKnifeCompatibility { get; set; } = false;
+		[JsonPropertyName("force-arena-clantags")]
+		public bool ForceArenaClantags { get; set; } = false;
 	}
 
 	public sealed class CommandSettings
@@ -194,6 +189,27 @@ namespace K4Arenas
 			"cdecline",
 			"cdeny"
 		};
+	}
+
+	public sealed class DefaultWeaponSettings
+	{
+		[JsonPropertyName("default-rifle")]
+		public string? DefaultRifle { get; set; } = null;
+
+		[JsonPropertyName("default-sniper")]
+		public string? DefaultSniper { get; set; } = null;
+
+		[JsonPropertyName("default-smg")]
+		public string? DefaultSMG { get; set; } = null;
+
+		[JsonPropertyName("default-lmg")]
+		public string? DefaultLMG { get; set; } = null;
+
+		[JsonPropertyName("default-shotgun")]
+		public string? DefaultShotgun { get; set; } = null;
+
+		[JsonPropertyName("default-pistol")]
+		public string? DefaultPistol { get; set; } = null;
 	}
 
 	public sealed class DatabaseSettings

@@ -1,10 +1,6 @@
-using System.Data;
-using System.Runtime.InteropServices;
-using System.Text;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Entities.Constants;
-using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
 using CounterStrikeSharp.API.Modules.Menu;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Localization;
@@ -64,43 +60,47 @@ public class ArenaPlayer
 		if (this.IsValid)
 		{
 			Controller.RemoveWeapons();
+			PlayerGiveNamedItem(Controller, CsItem.Knife);
 
-			if (!Config.CompatibilitySettings.CSSSkinchangerKnifeCompatibility)
+			if (roundType.PrimaryPreference == WeaponType.Unknown) // Warmup or Random round types
 			{
-				PlayerGiveNamedItem(Controller, CsItem.Knife);
+				PlayerGiveNamedItem(Controller, WeaponModel.GetRandomWeapon(WeaponType.Unknown));
+				PlayerGiveNamedItem(Controller, WeaponModel.GetRandomWeapon(WeaponType.Pistol));
 			}
-
-			if (roundType.PrimaryWeapon != null)
+			else
 			{
-				PlayerGiveNamedItem(Controller, (CsItem)roundType.PrimaryWeapon);
-			}
-			else if (roundType.UsePreferredPrimary && roundType.PrimaryPreference != null && WeaponPreferences != null)
-			{
-				WeaponType primaryPreferenceType = (WeaponType)roundType.PrimaryPreference;
-				CsItem? primaryPreference = primaryPreferenceType != WeaponType.Unknown ? WeaponPreferences.GetValueOrDefault(primaryPreferenceType) ?? null : null;
-
-				if (primaryPreference == null)
+				if (roundType.PrimaryWeapon != null)
 				{
-					primaryPreference = WeaponModel.GetRandomWeapon(primaryPreferenceType);
+					PlayerGiveNamedItem(Controller, (CsItem)roundType.PrimaryWeapon);
+				}
+				else if (roundType.UsePreferredPrimary && roundType.PrimaryPreference != null && WeaponPreferences != null)
+				{
+					WeaponType primaryPreferenceType = (WeaponType)roundType.PrimaryPreference;
+					CsItem? primaryPreference = WeaponPreferences.GetValueOrDefault(primaryPreferenceType) ?? null;
+
+					if (primaryPreference == null)
+					{
+						primaryPreference = WeaponModel.GetRandomWeapon(primaryPreferenceType);
+					}
+
+					PlayerGiveNamedItem(Controller, (CsItem)primaryPreference);
 				}
 
-				PlayerGiveNamedItem(Controller, (CsItem)primaryPreference);
-			}
-
-			if (roundType.SecondaryWeapon != null)
-			{
-				PlayerGiveNamedItem(Controller, (CsItem)roundType.SecondaryWeapon);
-			}
-			else if (roundType.UsePreferredSecondary && WeaponPreferences != null)
-			{
-				CsItem? secondaryPreference = WeaponPreferences.GetValueOrDefault(WeaponType.Pistol) ?? null;
-
-				if (secondaryPreference == null)
+				if (roundType.SecondaryWeapon != null)
 				{
-					secondaryPreference = WeaponModel.GetRandomWeapon(WeaponType.Pistol);
+					PlayerGiveNamedItem(Controller, (CsItem)roundType.SecondaryWeapon);
 				}
+				else if (roundType.UsePreferredSecondary && WeaponPreferences != null)
+				{
+					CsItem? secondaryPreference = WeaponPreferences.GetValueOrDefault(WeaponType.Pistol) ?? null;
 
-				PlayerGiveNamedItem(Controller, (CsItem)secondaryPreference);
+					if (secondaryPreference == null)
+					{
+						secondaryPreference = WeaponModel.GetRandomWeapon(WeaponType.Pistol);
+					}
+
+					PlayerGiveNamedItem(Controller, (CsItem)secondaryPreference);
+				}
 			}
 
 			Server.NextFrame(() =>
@@ -110,13 +110,14 @@ public class ArenaPlayer
 					CCSPlayerPawn playerPawn = Controller.PlayerPawn.Value;
 
 					playerPawn.ArmorValue = roundType.Armor ? 100 : 0;
-					Utilities.SetStateChanged(playerPawn, "CCSPlayerPawnBase", "m_ArmorValue");
+					Utilities.SetStateChanged(playerPawn, "CCSPlayerPawn", "m_ArmorValue");
 
 
-					CCSPlayer_ItemServices itemServive = new CCSPlayer_ItemServices(playerPawn.ItemServices!.Handle);
-					itemServive.HasHelmet = roundType.Helmet;
+					CCSPlayer_ItemServices itemServive = new CCSPlayer_ItemServices(playerPawn.ItemServices!.Handle)
+					{
+						HasHelmet = roundType.Helmet
+					};
 
-					Utilities.SetStateChanged(playerPawn, "CCSPlayer_ItemServices", "m_bHasHelmet");
 					Utilities.SetStateChanged(playerPawn, "CBasePlayerPawn", "m_pItemServices");
 				}
 			});
@@ -137,18 +138,25 @@ public class ArenaPlayer
 
 					if (isRoundTypeEnabled)
 					{
-						RoundPreferences.Remove(roundType);
-						Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.round_preferences_removed", Localizer[roundType.Name]]}");
+						if (RoundPreferences.Count == 1)
+						{
+							Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.round_preferences_atleastone"]}");
+						}
+						else
+						{
+							RoundPreferences.Remove(roundType);
+							Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.round_preferences_removed", Localizer[roundType.Name]]}");
+
+							ShowRoundPreferenceMenu();
+						}
 					}
 					else
 					{
 						RoundPreferences.Add(roundType);
 						Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.round_preferences_added", Localizer[roundType.Name]]}");
+
+						ShowRoundPreferenceMenu();
 					}
-
-					Task.Run(() => Plugin.UpdateRoundDatabaseAsync(steamID, roundType.ID, isRoundTypeEnabled));
-
-					ShowRoundPreferenceMenu();
 				}
 			);
 		}
@@ -180,11 +188,8 @@ public class ArenaPlayer
 		primaryPreferenceMenu.AddMenuOption(WeaponPreferences[weaponType] is null ? Localizer["k4.menu.weaponpref.item_enabled", Localizer["k4.general.random"]] : Localizer["k4.menu.weaponpref.item_disabled", Localizer["k4.general.random"]],
 			(player, option) =>
 			{
-				WeaponPreferences[weaponType] = CsItem.Snowball;
+				WeaponPreferences[weaponType] = null;
 				Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.weapon_preferences_added", Localizer["k4.general.random"]]}");
-
-				ulong steamID = Controller.SteamID;
-				Task.Run(() => Plugin.SelectWeaponDatabaseAsync(steamID, null, weaponType));
 
 				ShowWeaponSubPreferenceMenu(weaponType);
 			}
@@ -203,9 +208,6 @@ public class ArenaPlayer
 					WeaponPreferences[weaponType] = item;
 					Controller.PrintToChat($" {Localizer["k4.general.prefix"]} {Localizer["k4.chat.weapon_preferences_added", Localizer[item.ToString()]]}");
 
-					ulong steamID = Controller.SteamID;
-					Task.Run(() => Plugin.SelectWeaponDatabaseAsync(steamID, item, weaponType));
-
 					ShowWeaponSubPreferenceMenu(weaponType);
 				}
 			);
@@ -214,16 +216,12 @@ public class ArenaPlayer
 		MenuManager.OpenChatMenu(Controller, primaryPreferenceMenu);
 	}
 
-	public static MemoryFunctionVoid<IntPtr, string, IntPtr, IntPtr, IntPtr, IntPtr, IntPtr, IntPtr> GiveNamedItem2Linux = new(@"\x55\x48\x89\xE5\x41\x57\x41\x56\x41\x55\x41\x54\x53\x48\x83\xEC\x18\x48\x89\x7D\xC8\x48\x85\xF6\x74");
-	public static MemoryFunctionVoid<IntPtr, string, IntPtr, IntPtr, IntPtr, IntPtr, IntPtr, IntPtr> GiveNamedItem2Windows = new(@"\x48\x83\xEC\x38\x48\xC7\x44\x24\x28\x00\x00\x00\x00\x45\x33\xC9\x45\x33\xC0\xC6\x44\x24\x20\x00\xE8\x2A\x2A\x2A\x2A\x48\x85");
 	public void PlayerGiveNamedItem(CCSPlayerController player, CsItem item)
 	{
 		if (!player.PlayerPawn.IsValid || player.PlayerPawn.Value == null || !player.PlayerPawn.Value.IsValid || player.PlayerPawn.Value.ItemServices == null)
 			return;
 
-		var GiveNamedItem2 = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? GiveNamedItem2Linux : RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? GiveNamedItem2Windows : null;
-
-		if (!Plugin.Config.CompatibilitySettings.MetamodSkinchanger || GiveNamedItem2 is null)
+		if (!Plugin.Config.CompatibilitySettings.MetamodSkinchanger || Plugin.GiveNamedItem2 is null)
 		{
 			player.GiveNamedItem(item);
 			return;
@@ -236,7 +234,7 @@ public class ArenaPlayer
 
 		try
 		{
-			GiveNamedItem2.Invoke(player.PlayerPawn.Value.ItemServices.Handle, itemName, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+			Plugin.GiveNamedItem2.Invoke(player.PlayerPawn.Value.ItemServices.Handle, itemName, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 		}
 		catch (Exception e)
 		{
